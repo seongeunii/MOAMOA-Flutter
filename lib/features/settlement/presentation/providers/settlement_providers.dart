@@ -31,3 +31,9 @@ final settlementDetailProvider = FutureProvider.autoDispose
       (ref, key) =>
           ref.watch(settlementRepositoryProvider).detail(key.$1, key.$2),
     );
+
+final regularDuesProvider = FutureProvider.autoDispose
+    .family<List<RegularDue>, int>(
+      (ref, meetingId) =>
+          ref.watch(settlementRepositoryProvider).listRegularDues(meetingId),
+    );

@@ -48,6 +48,24 @@ class SettlementRemoteDataSource {
     body: reason == null ? null : {'reason': reason},
   );
 
+  Future<Map<String, dynamic>> listRegularDues(int meetingId) =>
+      _request('GET', '/v1/meetings/$meetingId/regular-dues');
+
+  Future<Map<String, dynamic>> createRegularDue(
+    int meetingId,
+    Map<String, Object?> body,
+  ) => _request('POST', '/v1/meetings/$meetingId/regular-dues', body: body);
+
+  Future<Map<String, dynamic>> updateRegularDue(
+    int meetingId,
+    int id,
+    Map<String, Object?> body,
+  ) =>
+      _request('PATCH', '/v1/meetings/$meetingId/regular-dues/$id', body: body);
+
+  Future<Map<String, dynamic>> deleteRegularDue(int meetingId, int id) =>
+      _request('DELETE', '/v1/meetings/$meetingId/regular-dues/$id');
+
   Future<Map<String, dynamic>> _request(
     String method,
     String path, {

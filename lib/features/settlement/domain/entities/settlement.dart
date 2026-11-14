@@ -6,6 +6,8 @@ enum SettlementStatus { inProgress, completed, canceled, unknown }
 
 enum PaymentStatus { unpaid, pending, paid, refunded, unknown }
 
+enum DuesCycle { weekly, monthly, unknown }
+
 @freezed
 abstract class Settlement with _$Settlement {
   const factory Settlement({
@@ -100,4 +102,39 @@ abstract class PaymentAction with _$PaymentAction {
     DateTime? confirmedAt,
     String? rejectionReason,
   }) = _PaymentAction;
+}
+
+@freezed
+abstract class RegularDue with _$RegularDue {
+  const factory RegularDue({
+    required int id,
+    required String title,
+    required int amount,
+    required DuesCycle cycle,
+    required String cycleDay,
+    required String sendTime,
+    required int dueDays,
+    required String bankName,
+    required String accountNumber,
+    required String accountHolder,
+    required bool isActive,
+    required bool postNotice,
+  }) = _RegularDue;
+}
+
+@freezed
+abstract class RegularDueInput with _$RegularDueInput {
+  const factory RegularDueInput({
+    required String title,
+    required int amount,
+    required DuesCycle cycle,
+    required String cycleDay,
+    required String sendTime,
+    required int dueDays,
+    required String bankName,
+    required String accountNumber,
+    required String accountHolder,
+    required bool postNotice,
+    @Default(true) bool isActive,
+  }) = _RegularDueInput;
 }

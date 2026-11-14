@@ -16,4 +16,13 @@ abstract interface class SettlementRepository {
     int paymentId, {
     String? reason,
   });
+  Future<List<RegularDue>> listRegularDues(int meetingId);
+  Future<int> createRegularDue(int meetingId, RegularDueInput input);
+  Future<bool?> updateRegularDue(
+    int meetingId,
+    int regularDuesId,
+    RegularDueInput input, {
+    bool applyToCurrentSettlement = false,
+  });
+  Future<void> deleteRegularDue(int meetingId, int regularDuesId);
 }

@@ -22,6 +22,7 @@ class SettlementListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final role = ref.watch(groupMyRoleProvider(meetingId));
     final list = ref.watch(settlementListProvider(meetingId));
+    final dues = ref.watch(regularDuesProvider(meetingId));
     return Scaffold(
       backgroundColor: MoaColors.page,
       bottomNavigationBar: SettlementBottomTabs(meetingId: meetingId),
@@ -47,6 +48,9 @@ class SettlementListPage extends ConsumerWidget {
                 meetingId: meetingId,
                 isAdmin: value.canManageGroup,
                 settlements: settlements,
+                dues: dues,
+                onDuesRetry: () =>
+                    ref.invalidate(regularDuesProvider(meetingId)),
               ),
             ),
           },
@@ -61,11 +65,15 @@ class _Content extends StatelessWidget {
     required this.meetingId,
     required this.isAdmin,
     required this.settlements,
+    required this.dues,
+    required this.onDuesRetry,
   });
 
   final int meetingId;
   final bool isAdmin;
   final List<Settlement> settlements;
+  final AsyncValue<List<RegularDue>> dues;
+  final VoidCallback onDuesRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +111,45 @@ class _Content extends StatelessWidget {
           _MemberFeatureCard(meetingId: meetingId, settlement: myUnpaid.first),
           const SizedBox(height: 28),
         ],
+        Row(
+          children: [
+            Expanded(child: Text('정기 회비', style: MoaText.titleM)),
+            if (isAdmin)
+              TextButton(
+                onPressed: () =>
+                    context.push('/meetings/$meetingId/regular-dues/new'),
+                child: const Text('등록'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        switch (dues) {
+          AsyncLoading() => const Center(child: CircularProgressIndicator()),
+          AsyncError() => _ActionCard(
+            title: '정기 회비를 불러오지 못했어요',
+            subtitle: '눌러서 다시 시도해 주세요',
+            onTap: onDuesRetry,
+          ),
+          AsyncData(value: final items) => Column(
+            children: [
+              if (items.isEmpty)
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('등록된 정기 회비가 없어요.'),
+                ),
+              for (final item in items)
+                _RegularDueRow(
+                  due: item,
+                  onTap: isAdmin
+                      ? () => context.push(
+                          '/meetings/$meetingId/regular-dues/${item.id}/edit',
+                        )
+                      : null,
+                ),
+            ],
+          ),
+        },
+        const SizedBox(height: 26),
         Row(
           children: [
             Expanded(
@@ -146,6 +193,35 @@ class _Content extends StatelessWidget {
       ],
     );
   }
+}
+
+class _RegularDueRow extends StatelessWidget {
+  const _RegularDueRow({required this.due, this.onTap});
+  final RegularDue due;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Material(
+      color: MoaColors.fill,
+      borderRadius: BorderRadius.circular(24),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 10,
+        ),
+        leading: const Icon(Icons.autorenew),
+        title: Text(due.title, style: MoaText.titleS),
+        subtitle: Text(
+          '${won(due.amount)} · ${due.cycle == DuesCycle.weekly ? '매주' : '매월'} ${due.cycleDay} · ${due.isActive ? '자동 청구 중' : '일시 중지'}',
+          style: MoaText.sub,
+        ),
+        trailing: onTap == null ? null : const Icon(Icons.chevron_right),
+      ),
+    ),
+  );
 }
 
 class _AdminFeatureCard extends ConsumerWidget {

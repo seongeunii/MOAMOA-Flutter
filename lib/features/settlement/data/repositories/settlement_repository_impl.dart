@@ -88,6 +88,81 @@ class SettlementRepositoryImpl implements SettlementRepository {
     ),
   );
 
+  @override
+  Future<List<RegularDue>> listRegularDues(int meetingId) => _read(() async {
+    final data = await _remote.listRegularDues(meetingId);
+    return (data['regularDues'] as List)
+        .map((item) => _regularDue(item as Map<String, dynamic>))
+        .toList(growable: false);
+  });
+
+  @override
+  Future<int> createRegularDue(int meetingId, RegularDueInput input) =>
+      _read(() async {
+        final data = await _remote.createRegularDue(
+          meetingId,
+          _regularDueBody(input),
+        );
+        return data['regularDuesId'] as int;
+      });
+
+  @override
+  Future<bool?> updateRegularDue(
+    int meetingId,
+    int regularDuesId,
+    RegularDueInput input, {
+    bool applyToCurrentSettlement = false,
+  }) => _read(() async {
+    final data = await _remote.updateRegularDue(meetingId, regularDuesId, {
+      ..._regularDueBody(input),
+      'isActive': input.isActive,
+      if (applyToCurrentSettlement) 'applyToCurrentSettlement': true,
+    });
+    return data['currentSettlementApplied'] as bool?;
+  });
+
+  @override
+  Future<void> deleteRegularDue(int meetingId, int regularDuesId) =>
+      _read(() async {
+        await _remote.deleteRegularDue(meetingId, regularDuesId);
+      });
+
+  Map<String, Object?> _regularDueBody(RegularDueInput input) => {
+    'title': input.title,
+    'amount': input.amount,
+    'cycleType': switch (input.cycle) {
+      DuesCycle.weekly => 'WEEKLY',
+      DuesCycle.monthly => 'MONTHLY',
+      DuesCycle.unknown => throw const FormatException('알 수 없는 회비 주기'),
+    },
+    'cycleDay': input.cycleDay,
+    'sendTime': input.sendTime,
+    'dueDays': input.dueDays,
+    'bankName': input.bankName,
+    'accountNumber': input.accountNumber,
+    'accountHolder': input.accountHolder,
+    'postNotice': input.postNotice,
+  };
+
+  RegularDue _regularDue(Map<String, dynamic> json) => RegularDue(
+    id: json['regularDuesId'] as int,
+    title: json['title'] as String,
+    amount: json['amount'] as int,
+    cycle: switch (json['cycleType']) {
+      'WEEKLY' => DuesCycle.weekly,
+      'MONTHLY' => DuesCycle.monthly,
+      _ => DuesCycle.unknown,
+    },
+    cycleDay: json['cycleDay'] as String,
+    sendTime: json['sendTime'] as String,
+    dueDays: json['dueDays'] as int,
+    bankName: json['bankName'] as String,
+    accountNumber: json['accountNumber'] as String,
+    accountHolder: json['accountHolder'] as String,
+    isActive: json['isActive'] as bool,
+    postNotice: json['postNotice'] as bool,
+  );
+
   Settlement _settlement(Map<String, dynamic> json) => Settlement(
     id: json['settlementId'] as int,
     title: json['title'] as String,

@@ -1,0 +1,392 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../core/errors/api_exception.dart';
+import '../../../../core/theme/moa_theme.dart';
+import '../../../group/domain/entities/member_role.dart';
+import '../../../group/presentation/providers/group_providers.dart';
+import '../../domain/entities/settlement.dart';
+import '../providers/settlement_providers.dart';
+
+class RegularDuesFormPage extends ConsumerWidget {
+  const RegularDuesFormPage({
+    super.key,
+    required this.meetingId,
+    this.regularDuesId,
+  });
+
+  final int meetingId;
+  final int? regularDuesId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final role = ref.watch(groupMyRoleProvider(meetingId));
+    if (role.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (role.asData?.value.canManageGroup != true) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('정기 회비')),
+        body: const Center(child: Text('관리자만 정기 회비를 설정할 수 있어요.')),
+      );
+    }
+    if (regularDuesId == null) {
+      return _Form(meetingId: meetingId);
+    }
+    final dues = ref.watch(regularDuesProvider(meetingId));
+    return switch (dues) {
+      AsyncLoading() => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      AsyncError() => Scaffold(
+        appBar: AppBar(title: const Text('정기 회비 수정')),
+        body: Center(
+          child: TextButton(
+            onPressed: () => ref.invalidate(regularDuesProvider(meetingId)),
+            child: const Text('회비 정보를 불러오지 못했어요. 다시 시도'),
+          ),
+        ),
+      ),
+      AsyncData(value: final items) => _Form(
+        meetingId: meetingId,
+        initial: items.where((item) => item.id == regularDuesId).firstOrNull,
+        missing: !items.any((item) => item.id == regularDuesId),
+      ),
+    };
+  }
+}
+
+class _Form extends ConsumerStatefulWidget {
+  const _Form({required this.meetingId, this.initial, this.missing = false});
+  final int meetingId;
+  final RegularDue? initial;
+  final bool missing;
+
+  @override
+  ConsumerState<_Form> createState() => _FormState();
+}
+
+class _FormState extends ConsumerState<_Form> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _title;
+  late final TextEditingController _amount;
+  late final TextEditingController _dueDays;
+  late final TextEditingController _bank;
+  late final TextEditingController _account;
+  late final TextEditingController _holder;
+  late DuesCycle _cycle;
+  late String _cycleDay;
+  late TimeOfDay _sendTime;
+  late bool _postNotice;
+  late bool _isActive;
+  bool _applyCurrent = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final due = widget.initial;
+    _title = TextEditingController(text: due?.title ?? '');
+    _amount = TextEditingController(text: due?.amount.toString() ?? '');
+    _dueDays = TextEditingController(text: due?.dueDays.toString() ?? '7');
+    _bank = TextEditingController(text: due?.bankName ?? '');
+    _account = TextEditingController(text: due?.accountNumber ?? '');
+    _holder = TextEditingController(text: due?.accountHolder ?? '');
+    _cycle = due?.cycle == DuesCycle.weekly
+        ? DuesCycle.weekly
+        : DuesCycle.monthly;
+    _cycleDay = due?.cycleDay ?? '10';
+    final parts = (due?.sendTime ?? '09:00').split(':');
+    _sendTime = TimeOfDay(
+      hour: int.tryParse(parts.first) ?? 9,
+      minute: int.tryParse(parts.last) ?? 0,
+    );
+    _postNotice = due?.postNotice ?? false;
+    _isActive = due?.isActive ?? true;
+  }
+
+  @override
+  void dispose() {
+    for (final controller in [
+      _title,
+      _amount,
+      _dueDays,
+      _bank,
+      _account,
+      _holder,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  RegularDueInput get _input => RegularDueInput(
+    title: _title.text.trim(),
+    amount: int.parse(_amount.text),
+    cycle: _cycle,
+    cycleDay: _cycleDay,
+    sendTime:
+        '${_sendTime.hour.toString().padLeft(2, '0')}:${_sendTime.minute.toString().padLeft(2, '0')}',
+    dueDays: int.parse(_dueDays.text),
+    bankName: _bank.text.trim(),
+    accountNumber: _account.text.trim(),
+    accountHolder: _holder.text.trim(),
+    postNotice: _postNotice,
+    isActive: _isActive,
+  );
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _busy = true);
+    try {
+      final repository = ref.read(settlementRepositoryProvider);
+      final original = widget.initial;
+      bool? applied;
+      if (original == null) {
+        await repository.createRegularDue(widget.meetingId, _input);
+      } else {
+        applied = await repository.updateRegularDue(
+          widget.meetingId,
+          original.id,
+          _input,
+          applyToCurrentSettlement: _applyCurrent,
+        );
+      }
+      if (!mounted) return;
+      ref.invalidate(regularDuesProvider(widget.meetingId));
+      if (applied == true) {
+        ref.invalidate(settlementListProvider(widget.meetingId));
+      }
+      final messenger = ScaffoldMessenger.of(context);
+      context.pop();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            applied == false
+                ? '설정은 저장했지만 이번 회차에는 적용되지 않았어요. 기존 정산을 확인해 주세요.'
+                : '정기 회비를 저장했어요.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is ApiException ? error.userMessage : '정기 회비를 저장하지 못했어요.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _delete() async {
+    final original = widget.initial;
+    if (original == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('정기 회비를 삭제할까요?'),
+        content: const Text('이후 자동 청구는 중단됩니다. 이미 청구된 회차 정산은 바뀌지 않습니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(settlementRepositoryProvider)
+          .deleteRegularDue(widget.meetingId, original.id);
+      if (!mounted) return;
+      ref.invalidate(regularDuesProvider(widget.meetingId));
+      context.pop();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is ApiException ? error.userMessage : '정기 회비를 삭제하지 못했어요.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.missing) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('정기 회비')),
+        body: const Center(child: Text('해당 정기 회비를 찾을 수 없어요.')),
+      );
+    }
+    final cycleDays = _cycle == DuesCycle.weekly
+        ? const ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+        : [...List.generate(28, (index) => '${index + 1}'), 'LAST'];
+    if (!cycleDays.contains(_cycleDay)) _cycleDay = cycleDays.first;
+    return Scaffold(
+      backgroundColor: MoaColors.page,
+      appBar: AppBar(
+        title: Text(widget.initial == null ? '정기 회비 등록' : '정기 회비 수정'),
+        backgroundColor: MoaColors.page,
+      ),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 36),
+          children: [
+            Text(
+              widget.initial == null ? '회비 만들기' : '회비 설정',
+              style: MoaText.titleXl,
+            ),
+            const SizedBox(height: 22),
+            _field(_title, '회비 이름'),
+            _field(_amount, '1인당 금액', numeric: true, max: 5000000),
+            Text('청구 주기', style: MoaText.titleS),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<DuesCycle>(
+                    initialValue: _cycle,
+                    items: const [
+                      DropdownMenuItem(
+                        value: DuesCycle.monthly,
+                        child: Text('매월'),
+                      ),
+                      DropdownMenuItem(
+                        value: DuesCycle.weekly,
+                        child: Text('매주'),
+                      ),
+                    ],
+                    onChanged: (value) => setState(() {
+                      _cycle = value ?? DuesCycle.monthly;
+                      _cycleDay = _cycle == DuesCycle.monthly ? '10' : 'MON';
+                    }),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey(_cycle),
+                    initialValue: _cycleDay,
+                    items: cycleDays
+                        .map(
+                          (day) => DropdownMenuItem(
+                            value: day,
+                            child: Text(day == 'LAST' ? '말일' : day),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _cycleDay = value ?? cycleDays.first),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('발송 시간'),
+              subtitle: Text(_sendTime.format(context)),
+              trailing: const Icon(Icons.access_time),
+              onTap: () async {
+                final value = await showTimePicker(
+                  context: context,
+                  initialTime: _sendTime,
+                );
+                if (value != null) setState(() => _sendTime = value);
+              },
+            ),
+            _field(_dueDays, '납부 기한 (발송 후 일수)', numeric: true, min: 0),
+            _field(_bank, '은행'),
+            _field(_account, '계좌번호'),
+            _field(_holder, '예금주'),
+            CheckboxListTile(
+              value: _postNotice,
+              onChanged: (value) =>
+                  setState(() => _postNotice = value ?? false),
+              title: const Text('회차마다 공지 발행'),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (widget.initial != null) ...[
+              SwitchListTile(
+                value: _isActive,
+                onChanged: (value) => setState(() => _isActive = value),
+                title: const Text('자동 청구 사용'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              CheckboxListTile(
+                value: _applyCurrent,
+                onChanged: (value) =>
+                    setState(() => _applyCurrent = value ?? false),
+                title: const Text('이번 회차에도 변경 적용'),
+                subtitle: const Text('이미 납부 제출한 구성원이 있으면 이번 회차에는 적용되지 않습니다.'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 18),
+              OutlinedButton(
+                onPressed: _busy ? null : _delete,
+                child: const Text('정기 회비 삭제'),
+              ),
+            ],
+          ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: FilledButton(
+            onPressed: _busy ? null : _save,
+            style: FilledButton.styleFrom(
+              backgroundColor: MoaColors.textPrimary,
+              minimumSize: const Size.fromHeight(54),
+            ),
+            child: Text(_busy ? '저장 중…' : '저장하기'),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    bool numeric = false,
+    int min = 1,
+    int? max,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 18),
+    child: TextFormField(
+      controller: controller,
+      keyboardType: numeric ? TextInputType.number : TextInputType.text,
+      decoration: InputDecoration(labelText: label),
+      validator: (value) {
+        final text = value?.trim() ?? '';
+        if (text.isEmpty) return '$label을 입력해 주세요.';
+        if (numeric) {
+          final number = int.tryParse(text);
+          if (number == null || number < min || (max != null && number > max)) {
+            return '$min~${max ?? '이상'} 범위로 입력해 주세요.';
+          }
+        }
+        return null;
+      },
+    ),
+  );
+}
