@@ -70,7 +70,7 @@ void main() {
   testWidgets('관리자도 정산 대상이면 본인 납부 동작을 사용할 수 있다', (tester) async {
     await open(tester, role: () async => MemberRole.admin);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('내 납부'), 180);
+    await tester.scrollUntilVisible(find.text('납부했어요'), 180);
     expect(find.text('납부했어요'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
