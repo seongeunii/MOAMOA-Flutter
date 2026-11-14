@@ -101,23 +101,36 @@ class _SettlementDetailPageState extends ConsumerState<SettlementDetailPage> {
         ),
       ),
       body: SafeArea(
-        child: switch (detail) {
+        child: switch (role) {
           AsyncLoading() => const Center(child: CircularProgressIndicator()),
-          AsyncError(:final error) => MoaErrorWidget(
-            message: error is ApiException
-                ? error.userMessage
-                : '정산 정보를 불러오지 못했어요.',
-            onAction: () => ref.invalidate(
-              settlementDetailProvider((widget.meetingId, widget.settlementId)),
-            ),
+          AsyncError() => MoaErrorWidget(
+            message: '모임 권한을 확인하지 못했어요.',
+            onAction: () =>
+                ref.invalidate(groupMyRoleProvider(widget.meetingId)),
           ),
-          AsyncData(value: final data) => RefreshIndicator(
-            onRefresh: () async => ref.refresh(
-              settlementDetailProvider((widget.meetingId, widget.settlementId))
-                  .future,
+          AsyncData(:final value) => switch (detail) {
+            AsyncLoading() => const Center(child: CircularProgressIndicator()),
+            AsyncError(:final error) => MoaErrorWidget(
+              message: error is ApiException
+                  ? error.userMessage
+                  : '정산 정보를 불러오지 못했어요.',
+              onAction: () => ref.invalidate(
+                settlementDetailProvider((
+                  widget.meetingId,
+                  widget.settlementId,
+                )),
+              ),
             ),
-            child: _content(data, role.asData?.value.canManageGroup ?? false),
-          ),
+            AsyncData(value: final data) => RefreshIndicator(
+              onRefresh: () async => ref.refresh(
+                settlementDetailProvider((
+                  widget.meetingId,
+                  widget.settlementId,
+                )).future,
+              ),
+              child: _content(data, value.canManageGroup),
+            ),
+          },
         },
       ),
     );
@@ -164,7 +177,9 @@ class _SettlementDetailPageState extends ConsumerState<SettlementDetailPage> {
               Text(
                 isAdmin
                     ? '${data.summary.paidCount}/${data.summary.totalCount}명 · ${won(data.summary.paidAmount)}'
-                    : won(data.myPayment?.amount ?? 0),
+                    : data.myPayment == null
+                    ? '정산 대상이 아니에요'
+                    : won(data.myPayment!.amount),
                 style: MoaText.titleXl.copyWith(color: Colors.white),
               ),
               const SizedBox(height: 6),
@@ -249,52 +264,56 @@ class _SettlementDetailPageState extends ConsumerState<SettlementDetailPage> {
             (item) => item.status == PaymentStatus.paid,
           ))
             _paymentTile(payment, data),
+          if (data.status == SettlementStatus.inProgress &&
+              data.myPayment?.status == PaymentStatus.unpaid) ...[
+            const SizedBox(height: 20),
+            Text('내 납부', style: MoaText.titleM),
+            const SizedBox(height: 10),
+            _submitPaymentButton(),
+          ],
         ] else if (data.status == SettlementStatus.inProgress &&
             data.myPayment?.status == PaymentStatus.unpaid) ...[
-          FilledButton(
-            onPressed: _submitting
-                ? null
-                : () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('납부 완료를 알릴까요?'),
-                        content: const Text(
-                          '계좌 이체를 마친 뒤 제출해 주세요. 관리자가 입금 내역을 확인합니다.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('취소'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('제출'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirmed == true) {
-                      await _run(() async {
-                        await ref
-                            .read(settlementRepositoryProvider)
-                            .submitPayment(
-                              widget.meetingId,
-                              widget.settlementId,
-                            );
-                      });
-                    }
-                  },
-            style: FilledButton.styleFrom(
-              backgroundColor: MoaColors.textPrimary,
-              minimumSize: const Size.fromHeight(54),
-            ),
-            child: Text(_submitting ? '제출 중…' : '납부했어요'),
-          ),
+          _submitPaymentButton(),
         ],
       ],
     );
   }
+
+  Widget _submitPaymentButton() => FilledButton(
+    onPressed: _submitting
+        ? null
+        : () async {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('납부 완료를 알릴까요?'),
+                content: const Text('계좌 이체를 마친 뒤 제출해 주세요. 관리자가 입금 내역을 확인합니다.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('취소'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('제출'),
+                  ),
+                ],
+              ),
+            );
+            if (confirmed == true) {
+              await _run(() async {
+                await ref
+                    .read(settlementRepositoryProvider)
+                    .submitPayment(widget.meetingId, widget.settlementId);
+              });
+            }
+          },
+    style: FilledButton.styleFrom(
+      backgroundColor: MoaColors.textPrimary,
+      minimumSize: const Size.fromHeight(54),
+    ),
+    child: Text(_submitting ? '제출 중…' : '납부했어요'),
+  );
 
   Widget _paymentTile(
     SettlementPayment payment,
