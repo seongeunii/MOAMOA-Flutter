@@ -8,6 +8,7 @@ import '../../../group/domain/entities/member_role.dart';
 import '../../../group/presentation/providers/group_providers.dart';
 import '../../domain/entities/settlement.dart';
 import '../providers/settlement_providers.dart';
+import '../settlement_format.dart';
 
 class RegularDuesFormPage extends ConsumerWidget {
   const RegularDuesFormPage({
@@ -241,27 +242,28 @@ class _FormState extends ConsumerState<_Form> {
     return Scaffold(
       backgroundColor: MoaColors.page,
       appBar: AppBar(
-        title: Text(widget.initial == null ? '정기 회비 등록' : '정기 회비 수정'),
+        title: const Text('정기 회비'),
         backgroundColor: MoaColors.page,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => context.pop(),
+        ),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 36),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
           children: [
-            Text(
-              widget.initial == null ? '회비 만들기' : '회비 설정',
-              style: MoaText.titleXl,
-            ),
-            const SizedBox(height: 22),
-            _field(_title, '회비 이름'),
+            _field(_title, '이름'),
             _field(_amount, '1인당 금액', numeric: true, max: 5000000),
-            Text('청구 주기', style: MoaText.titleS),
+            Text('반복', style: MoaText.subStrong),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   child: DropdownButtonFormField<DuesCycle>(
                     initialValue: _cycle,
+                    decoration: _inputDecoration(),
                     items: const [
                       DropdownMenuItem(
                         value: DuesCycle.monthly,
@@ -283,11 +285,17 @@ class _FormState extends ConsumerState<_Form> {
                   child: DropdownButtonFormField<String>(
                     key: ValueKey(_cycle),
                     initialValue: _cycleDay,
+                    decoration: _inputDecoration(),
                     items: cycleDays
                         .map(
                           (day) => DropdownMenuItem(
                             value: day,
-                            child: Text(day == 'LAST' ? '말일' : day),
+                            child: Text(
+                              regularDuesCycleLabel(_cycle, day).replaceFirst(
+                                _cycle == DuesCycle.weekly ? '매주 ' : '매월 ',
+                                '',
+                              ),
+                            ),
                           ),
                         )
                         .toList(),
@@ -298,30 +306,45 @@ class _FormState extends ConsumerState<_Form> {
               ],
             ),
             const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('발송 시간'),
-              subtitle: Text(_sendTime.format(context)),
-              trailing: const Icon(Icons.access_time),
-              onTap: () async {
-                final value = await showTimePicker(
-                  context: context,
-                  initialTime: _sendTime,
-                );
-                if (value != null) setState(() => _sendTime = value);
-              },
+            Text('발송 시간', style: MoaText.subStrong),
+            const SizedBox(height: 8),
+            Material(
+              color: MoaColors.fill,
+              borderRadius: BorderRadius.circular(18),
+              child: ListTile(
+                title: Text(_sendTime.format(context)),
+                trailing: const Icon(Icons.access_time),
+                onTap: () async {
+                  final value = await showTimePicker(
+                    context: context,
+                    initialTime: _sendTime,
+                  );
+                  if (value != null) setState(() => _sendTime = value);
+                },
+              ),
             ),
+            const SizedBox(height: 18),
+            Text('대상', style: MoaText.subStrong),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: MoaColors.fill,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Text('구성원 전체 · 새로 들어온 사람 포함', style: MoaText.body),
+            ),
+            const SizedBox(height: 18),
             _field(_dueDays, '납부 기한 (발송 후 일수)', numeric: true, min: 0),
             _field(_bank, '은행'),
             _field(_account, '계좌번호'),
             _field(_holder, '예금주'),
-            CheckboxListTile(
+            SwitchListTile(
               value: _postNotice,
-              onChanged: (value) =>
-                  setState(() => _postNotice = value ?? false),
-              title: const Text('회차마다 공지 발행'),
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
+              onChanged: (value) => setState(() => _postNotice = value),
+              title: const Text('요청할 때마다 공지에도 올리기'),
+              subtitle: const Text('공지 탭에 이번 달 회비 안내가 올라가요'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
             ),
             if (widget.initial != null) ...[
               SwitchListTile(
@@ -357,7 +380,13 @@ class _FormState extends ConsumerState<_Form> {
               backgroundColor: MoaColors.textPrimary,
               minimumSize: const Size.fromHeight(54),
             ),
-            child: Text(_busy ? '저장 중…' : '저장하기'),
+            child: Text(
+              _busy
+                  ? '저장 중…'
+                  : widget.initial == null
+                  ? '정기 회비 시작하기'
+                  : '변경사항 저장',
+            ),
           ),
         ),
       ),
@@ -372,21 +401,40 @@ class _FormState extends ConsumerState<_Form> {
     int? max,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 18),
-    child: TextFormField(
-      controller: controller,
-      keyboardType: numeric ? TextInputType.number : TextInputType.text,
-      decoration: InputDecoration(labelText: label),
-      validator: (value) {
-        final text = value?.trim() ?? '';
-        if (text.isEmpty) return '$label을 입력해 주세요.';
-        if (numeric) {
-          final number = int.tryParse(text);
-          if (number == null || number < min || (max != null && number > max)) {
-            return '$min~${max ?? '이상'} 범위로 입력해 주세요.';
-          }
-        }
-        return null;
-      },
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: MoaText.subStrong),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          keyboardType: numeric ? TextInputType.number : TextInputType.text,
+          decoration: _inputDecoration(),
+          validator: (value) {
+            final text = value?.trim() ?? '';
+            if (text.isEmpty) return '$label을 입력해 주세요.';
+            if (numeric) {
+              final number = int.tryParse(text);
+              if (number == null ||
+                  number < min ||
+                  (max != null && number > max)) {
+                return '$min~${max ?? '이상'} 범위로 입력해 주세요.';
+              }
+            }
+            return null;
+          },
+        ),
+      ],
+    ),
+  );
+
+  InputDecoration _inputDecoration() => InputDecoration(
+    filled: true,
+    fillColor: MoaColors.fill,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: BorderSide.none,
     ),
   );
 }

@@ -22,3 +22,19 @@ String settlementStatusLabel(SettlementStatus status) => switch (status) {
   SettlementStatus.canceled => '취소됨',
   SettlementStatus.unknown => '상태 확인 필요',
 };
+
+String regularDuesCycleLabel(DuesCycle cycle, String day) {
+  if (cycle == DuesCycle.monthly) {
+    return day == 'LAST' ? '매월 말일' : '매월 $day일';
+  }
+  const weekdays = {
+    'MON': '월요일',
+    'TUE': '화요일',
+    'WED': '수요일',
+    'THU': '목요일',
+    'FRI': '금요일',
+    'SAT': '토요일',
+    'SUN': '일요일',
+  };
+  return cycle == DuesCycle.weekly ? '매주 ${weekdays[day] ?? day}' : '주기 확인 필요';
+}

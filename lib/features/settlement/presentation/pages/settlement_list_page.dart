@@ -206,19 +206,81 @@ class _RegularDueRow extends StatelessWidget {
     child: Material(
       color: MoaColors.fill,
       borderRadius: BorderRadius.circular(24),
-      child: ListTile(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
         onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 10,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: MoaColors.accentTint,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.autorenew,
+                      color: MoaColors.accentText,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(due.title, style: MoaText.titleS),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${won(due.amount)} · ${regularDuesCycleLabel(due.cycle, due.cycleDay)} · ${due.sendTime}',
+                          style: MoaText.sub,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: due.isActive
+                          ? MoaColors.accentTint
+                          : MoaColors.raised,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      due.isActive ? '진행 중' : '일시 중지',
+                      style: MoaText.captionStrong.copyWith(
+                        color: due.isActive
+                            ? MoaColors.accentText
+                            : MoaColors.textTertiary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (onTap != null) ...[
+                const Divider(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '납부 기한: 요청일로부터 ${due.dueDays}일',
+                        style: MoaText.sub,
+                      ),
+                    ),
+                    Text('설정', style: MoaText.sub),
+                    const Icon(Icons.chevron_right, size: 18),
+                  ],
+                ),
+              ],
+            ],
+          ),
         ),
-        leading: const Icon(Icons.autorenew),
-        title: Text(due.title, style: MoaText.titleS),
-        subtitle: Text(
-          '${won(due.amount)} · ${due.cycle == DuesCycle.weekly ? '매주' : '매월'} ${due.cycleDay} · ${due.isActive ? '자동 청구 중' : '일시 중지'}',
-          style: MoaText.sub,
-        ),
-        trailing: onTap == null ? null : const Icon(Icons.chevron_right),
       ),
     ),
   );
