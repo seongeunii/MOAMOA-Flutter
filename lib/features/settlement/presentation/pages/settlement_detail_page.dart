@@ -27,6 +27,32 @@ class SettlementDetailPage extends ConsumerStatefulWidget {
       _SettlementDetailPageState();
 }
 
+class _DetailStat extends StatelessWidget {
+  const _DetailStat(this.count, this.label);
+  final int count;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3A3A3C),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Text('$count', style: MoaText.titleS.copyWith(color: Colors.white)),
+          Text(
+            label,
+            style: MoaText.caption.copyWith(color: MoaColors.onDarkSecondary),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _SettlementDetailPageState extends ConsumerState<SettlementDetailPage> {
   bool _submitting = false;
 
@@ -108,9 +134,18 @@ class _SettlementDetailPageState extends ConsumerState<SettlementDetailPage> {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
       children: [
-        Text(data.title, style: MoaText.titleXl),
+        if (isAdmin) ...[
+          Text(data.scheduleTitle ?? data.title, style: MoaText.caption),
+          const SizedBox(height: 10),
+        ],
+        Text(isAdmin ? '정산 현황' : data.title, style: MoaText.titleXl),
         const SizedBox(height: 6),
-        Text(settlementStatusLabel(data.status), style: MoaText.sub),
+        Text(
+          isAdmin
+              ? '${won(data.totalAmount)} · ${shortDate(data.dueAt)}까지'
+              : '${settlementStatusLabel(data.status)} · ${shortDate(data.dueAt)}까지',
+          style: MoaText.sub,
+        ),
         const SizedBox(height: 22),
         Container(
           padding: const EdgeInsets.all(24),
@@ -122,59 +157,81 @@ class _SettlementDetailPageState extends ConsumerState<SettlementDetailPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isAdmin ? '정산 현황' : '내가 낼 금액',
+                isAdmin ? '완납' : '내가 낼 금액',
                 style: MoaText.sub.copyWith(color: MoaColors.onDarkSecondary),
               ),
               const SizedBox(height: 8),
               Text(
-                won(isAdmin ? data.totalAmount : (data.myPayment?.amount ?? 0)),
+                isAdmin
+                    ? '${data.summary.paidCount}/${data.summary.totalCount}명 · ${won(data.summary.paidAmount)}'
+                    : won(data.myPayment?.amount ?? 0),
                 style: MoaText.titleXl.copyWith(color: Colors.white),
               ),
               const SizedBox(height: 6),
-              Text(
-                isAdmin
-                    ? '${data.summary.paidCount}/${data.summary.totalCount}명 납부 완료'
-                    : '${paymentStatusLabel(data.myPayment?.status)} · ${shortDate(data.dueAt)}까지',
-                style: MoaText.sub.copyWith(color: MoaColors.onDarkSecondary),
-              ),
+              if (isAdmin) ...[
+                const SizedBox(height: 14),
+                LinearProgressIndicator(
+                  value: data.summary.totalCount == 0
+                      ? 0
+                      : data.summary.paidCount / data.summary.totalCount,
+                  color: Colors.white,
+                  backgroundColor: const Color(0xFF3A3A3C),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    _DetailStat(data.summary.paidCount, '완납'),
+                    const SizedBox(width: 8),
+                    _DetailStat(data.summary.pendingCount, '확인 대기'),
+                    const SizedBox(width: 8),
+                    _DetailStat(data.summary.unpaidCount, '미납'),
+                  ],
+                ),
+              ] else
+                Text(
+                  '${paymentStatusLabel(data.myPayment?.status)} · ${shortDate(data.dueAt)}까지',
+                  style: MoaText.sub.copyWith(color: MoaColors.onDarkSecondary),
+                ),
             ],
           ),
         ),
         const SizedBox(height: 22),
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: MoaColors.fill,
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('입금 계좌', style: MoaText.titleS),
-              const SizedBox(height: 8),
-              Text(
-                '${data.bankName} ${data.accountNumber}',
-                style: MoaText.sub,
-              ),
-              Text('예금주 ${data.accountHolder}', style: MoaText.sub),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () async {
-                  await Clipboard.setData(
-                    ClipboardData(text: data.accountNumber),
-                  );
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('계좌번호를 복사했어요.')),
+        if (!isAdmin)
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: MoaColors.fill,
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('입금 계좌', style: MoaText.titleS),
+                const SizedBox(height: 8),
+                Text(
+                  '${data.bankName} ${data.accountNumber}',
+                  style: MoaText.sub,
+                ),
+                Text('예금주 ${data.accountHolder}', style: MoaText.sub),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      ClipboardData(text: data.accountNumber),
                     );
-                  }
-                },
-                icon: const Icon(Icons.copy_outlined, size: 18),
-                label: const Text('계좌번호 복사'),
-              ),
-            ],
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('계좌번호를 복사했어요.')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy_outlined, size: 18),
+                  label: const Text('계좌번호 복사'),
+                ),
+              ],
+            ),
           ),
-        ),
         const SizedBox(height: 24),
         if (isAdmin) ...[
           Text('확인 대기 ${pending.length}명', style: MoaText.titleM),

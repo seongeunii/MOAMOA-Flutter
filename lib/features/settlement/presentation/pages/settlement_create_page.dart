@@ -98,7 +98,6 @@ class _SettlementCreatePageState extends ConsumerState<SettlementCreatePage> {
     return Scaffold(
       backgroundColor: MoaColors.page,
       appBar: AppBar(
-        title: const Text('정산 등록'),
         backgroundColor: MoaColors.page,
         leading: IconButton(
           icon: const Icon(Icons.close),
@@ -114,7 +113,7 @@ class _SettlementCreatePageState extends ConsumerState<SettlementCreatePage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                 children: [
-                  Text('새 정산 만들기', style: MoaText.titleXl),
+                  Text('정산 정보 등록', style: MoaText.titleXl),
                   const SizedBox(height: 26),
                   _field(_title, '정산 이름', '예: 11월 모임 회비'),
                   _field(_amount, '총 정산 금액', '원', number: true, amount: true),
@@ -132,14 +131,42 @@ class _SettlementCreatePageState extends ConsumerState<SettlementCreatePage> {
                   else if (members.hasInvalidMemberIds)
                     const Text('구성원 정보를 확인할 수 없어요.')
                   else
-                    ...members.members.map(_memberTile),
-                  if (_selected.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      '1인 예상 금액 ${won((int.tryParse(_amount.text.replaceAll(',', '')) ?? 0) ~/ _selected.length)}',
-                      style: MoaText.titleS.copyWith(color: MoaColors.accent),
+                    Material(
+                      color: MoaColors.fill,
+                      borderRadius: BorderRadius.circular(20),
+                      child: ExpansionTile(
+                        title: Text('${_selected.length}명 선택'),
+                        subtitle: const Text('정산 대상 구성원을 선택해 주세요'),
+                        children: members.members.map(_memberTile).toList(),
+                      ),
                     ),
-                  ],
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE5F1FF),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Row(
+                      children: [
+                        const Expanded(child: Text('1인당 예상 금액')),
+                        Text(
+                          _selected.isEmpty
+                              ? '대상 선택 필요'
+                              : won(
+                                  (int.tryParse(
+                                            _amount.text.replaceAll(',', ''),
+                                          ) ??
+                                          0) ~/
+                                      _selected.length,
+                                ),
+                          style: MoaText.titleS.copyWith(
+                            color: const Color(0xFF0077E5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   _field(_bank, '은행', '은행명'),
                   _field(_account, '계좌번호', '계좌번호'),
@@ -167,6 +194,11 @@ class _SettlementCreatePageState extends ConsumerState<SettlementCreatePage> {
                         );
                       }
                     },
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: MoaColors.fill,
+                      minimumSize: const Size.fromHeight(54),
+                      side: BorderSide.none,
+                    ),
                     child: Text(_dueAt == null ? '날짜 선택' : shortDate(_dueAt!)),
                   ),
                   const SizedBox(height: 8),
@@ -174,7 +206,8 @@ class _SettlementCreatePageState extends ConsumerState<SettlementCreatePage> {
                     value: _postNotice,
                     onChanged: (value) =>
                         setState(() => _postNotice = value ?? false),
-                    title: const Text('공지에도 등록하기'),
+                    title: const Text('공지에도 올리기'),
+                    subtitle: const Text('공지 탭에 정산 안내가 같이 올라가요'),
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
                   ),
@@ -196,7 +229,7 @@ class _SettlementCreatePageState extends ConsumerState<SettlementCreatePage> {
                     backgroundColor: MoaColors.textPrimary,
                     minimumSize: const Size.fromHeight(54),
                   ),
-                  child: Text(_submitting ? '등록 중…' : '정산 등록하기'),
+                  child: Text(_submitting ? '등록 중…' : '정산 요청 보내기'),
                 ),
               ),
             )
@@ -234,7 +267,16 @@ class _SettlementCreatePageState extends ConsumerState<SettlementCreatePage> {
       onChanged: (_) {
         if (amount) setState(() {});
       },
-      decoration: InputDecoration(labelText: label, hintText: hint),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        filled: true,
+        fillColor: MoaColors.fill,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide.none,
+        ),
+      ),
       validator: (value) {
         final text = value?.trim() ?? '';
         if (text.isEmpty) return '$label을 입력해 주세요.';

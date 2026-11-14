@@ -78,6 +78,8 @@ class _Content extends StatelessWidget {
     final myUnpaid = active.where(
       (item) => item.myPaymentStatus == PaymentStatus.unpaid,
     );
+    final recent = [...settlements]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
@@ -109,6 +111,11 @@ class _Content extends StatelessWidget {
                 style: MoaText.titleM,
               ),
             ),
+            TextButton(
+              onPressed: () =>
+                  context.push('/meetings/$meetingId/settlements/history'),
+              child: const Text('전체'),
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -118,13 +125,22 @@ class _Content extends StatelessWidget {
             child: Text('아직 정산 내역이 없어요.'),
           )
         else
-          for (final settlement in isAdmin ? active : settlements)
+          for (final settlement in (isAdmin ? active : recent).take(3))
             _SettlementRow(meetingId: meetingId, settlement: settlement),
         if (isAdmin && history.isNotEmpty) ...[
           const SizedBox(height: 24),
-          Text('완료된 정산', style: MoaText.titleM),
+          Row(
+            children: [
+              Expanded(child: Text('지난 정산', style: MoaText.titleM)),
+              TextButton(
+                onPressed: () =>
+                    context.push('/meetings/$meetingId/settlements/history'),
+                child: const Text('전체'),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
-          for (final settlement in history)
+          for (final settlement in history.take(3))
             _SettlementRow(meetingId: meetingId, settlement: settlement),
         ],
       ],
@@ -132,45 +148,92 @@ class _Content extends StatelessWidget {
   }
 }
 
-class _AdminFeatureCard extends StatelessWidget {
+class _AdminFeatureCard extends ConsumerWidget {
   const _AdminFeatureCard({required this.meetingId, required this.settlement});
   final int meetingId;
   final Settlement settlement;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(22),
-    decoration: BoxDecoration(
-      color: MoaColors.accent,
-      borderRadius: BorderRadius.circular(28),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '진행 중인 정산',
-          style: MoaText.sub.copyWith(color: MoaColors.onDarkSecondary),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          settlement.title,
-          style: MoaText.titleL.copyWith(color: Colors.white),
-        ),
-        const SizedBox(height: 18),
-        FilledButton(
-          onPressed: () =>
-              context.push('/meetings/$meetingId/settlements/${settlement.id}'),
-          style: FilledButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: MoaColors.textPrimary,
-            minimumSize: const Size.fromHeight(48),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summary = ref
+        .watch(settlementDetailProvider((meetingId, settlement.id)))
+        .asData
+        ?.value
+        .summary;
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: MoaColors.accent,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '진행 중인 정산',
+            style: MoaText.sub.copyWith(color: MoaColors.onDarkSecondary),
           ),
-          child: const Text('정산 현황 보기'),
-        ),
-      ],
+          const SizedBox(height: 4),
+          Text(
+            settlement.title,
+            style: MoaText.titleL.copyWith(color: Colors.white),
+          ),
+          if (summary != null) ...[
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                _StatusCount(value: summary.paidCount, label: '완납'),
+                const SizedBox(width: 8),
+                _StatusCount(value: summary.pendingCount, label: '확인 대기'),
+                const SizedBox(width: 8),
+                _StatusCount(value: summary.unpaidCount, label: '미납'),
+              ],
+            ),
+          ],
+          const SizedBox(height: 18),
+          FilledButton(
+            onPressed: () => context.push(
+              '/meetings/$meetingId/settlements/${settlement.id}',
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: MoaColors.textPrimary,
+              minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: const Text('정산 현황 보기'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusCount extends StatelessWidget {
+  const _StatusCount({required this.value, required this.label});
+  final int value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3A3A3C),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Text('$value', style: MoaText.titleS.copyWith(color: Colors.white)),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: MoaText.caption.copyWith(color: MoaColors.onDarkSecondary),
+          ),
+        ],
+      ),
     ),
   );
 }
